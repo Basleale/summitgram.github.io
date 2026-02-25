@@ -10,29 +10,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "All fields are required" }, { status: 400 })
     }
 
-    // Get stored verification data
     const storedData = verificationStore.get(email)
-
     if (!storedData) {
       return NextResponse.json({ error: "Verification code not found or expired" }, { status: 400 })
     }
 
-    // Check if code matches
     if (storedData.code !== code) {
       return NextResponse.json({ error: "Invalid verification code" }, { status: 400 })
     }
 
-    // Check if code is expired (10 minutes)
     const isExpired = Date.now() - storedData.timestamp > 10 * 60 * 1000
     if (isExpired) {
       verificationStore.delete(email)
       return NextResponse.json({ error: "Verification code has expired" }, { status: 400 })
     }
 
-    // Create Supabase user
+    // Initialize client and check if configuration exists
     const supabase = createServerClient()
     if (!supabase) {
-      return NextResponse.json({ error: "Supabase not configured" }, { status: 500 })
+      console.error("Supabase configuration missing (URL or Service Role Key)")
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
     }
 
     const { data, error } = await supabase.auth.admin.createUser({
@@ -43,15 +40,13 @@ export async function POST(request: NextRequest) {
         display_name: name,
         full_name: name,
       },
-      email_confirm: true, // Skip email confirmation since we verified with our code
+      email_confirm: true,
     })
 
     if (error) {
-      console.error("Supabase user creation error:", error)
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    // Clean up verification code
     verificationStore.delete(email)
 
     return NextResponse.json({
@@ -60,7 +55,6 @@ export async function POST(request: NextRequest) {
       user: data.user,
     })
   } catch (error) {
-    console.error("Verify code error:", error)
     return NextResponse.json({ error: "Failed to verify code" }, { status: 500 })
   }
 }
