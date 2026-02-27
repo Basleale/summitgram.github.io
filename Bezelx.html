@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bezelx Global | Universal Receiver</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap');
+
+        :root {
+            --neon-blue: #00f2ff;
+            --neon-amber: #ffaa00;
+            --bg-dark: #010204;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .mono { font-family: 'Space Mono', monospace; }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 20;
+            pointer-events: none;
+            display: grid;
+            grid-template-columns: 350px 1fr 350px;
+            grid-template-rows: auto 1fr auto;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .ui-element {
+            pointer-events: auto;
+            background: rgba(5, 7, 12, 0.96);
+            backdrop-filter: blur(25px);
+            border: 1px solid rgba(0, 242, 255, 0.1);
+            border-radius: 2px;
+            padding: 15px;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.95);
+            z-index: 30;
+        }
+
+        #waterfall {
+            width: 100%;
+            height: 100px;
+            background: #000;
+            border: 1px solid #111;
+            image-rendering: pixelated;
+        }
+
+        .active-station {
+            border-color: var(--neon-blue) !important;
+            background: rgba(0, 242, 255, 0.15) !important;
+        }
+
+        #power-overlay {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .station-item {
+            border: 1px solid rgba(255,255,255,0.03);
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        
+        .station-item:hover {
+            border-color: rgba(0, 242, 255, 0.3);
+            background: rgba(255,255,255,0.02);
+        }
+
+        .search-input {
+            background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(0, 242, 255, 0.2);
+            color: var(--neon-blue);
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            padding: 10px 12px;
+            width: 100%;
+            outline: none;
+            pointer-events: auto;
+        }
+
+        .tab-btn {
+            position: relative;
+            padding: 8px 16px;
+            font-size: 10px;
+            font-family: 'Space Mono', monospace;
+            letter-spacing: 0.2em;
+            color: #444;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .tab-btn.active {
+            color: var(--neon-blue);
+            border-bottom-color: var(--neon-blue);
+            text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+        }
+
+        #tv-viewport-container {
+            width: 100%;
+            background: #000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            border: 1px solid rgba(0, 242, 255, 0.2);
+            pointer-events: auto;
+            overflow: hidden;
+        }
+        
+        #video-player {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--neon-blue); }
+        
+        .hidden { display: none !important; }
+
+        input::placeholder {
+            color: rgba(0, 242, 255, 0.3);
+        }
+
+        .tv-overlay-tag {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(239, 68, 68, 0.8);
+            color: white;
+            font-size: 8px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 2px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            pointer-events: none;
+            z-index: 40;
+        }
+
+        .fav-btn {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #333;
+            transition: all 0.2s;
+            padding: 4px;
+            z-index: 50;
+        }
+        .fav-btn.active {
+            color: var(--neon-amber);
+        }
+
+        .filter-toggle {
+            font-size: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 6px 8px;
+            border: 1px solid #222;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: rgba(0,0,0,0.3);
+        }
+        .filter-toggle.active {
+            background: rgba(0, 242, 255, 0.1);
+            border-color: var(--neon-blue);
+            color: var(--neon-blue);
+        }
+
+        /* Viewport Fullscreen Overrides */
+        .fullscreen-active {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 9999 !important;
+            background: black !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+            display: flex !important;
+        }
+        
+        #exit-fullscreen-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 10px 20px;
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            cursor: pointer;
+            display: none;
+            backdrop-filter: blur(10px);
+        }
+        
+        .fullscreen-active #exit-fullscreen-btn {
+            display: block;
+        }
+
+        .fullscreen-active #video-player {
+            object-fit: contain;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="exit-fullscreen-btn" onclick="toggleFullscreen()">Exit Fullscreen Mode</button>
+
+    <div id="power-overlay">
+        <div class="mb-6 flex flex-col items-center text-center">
+            <div id="boot-text" class="text-cyan-500 mono text-[10px] tracking-[0.5em] uppercase mb-10 animate-pulse">Initializing Bezelx Uplink</div>
+            <button id="power-btn" class="group relative px-10 py-4 overflow-hidden border border-cyan-500/50 cursor-pointer">
+                <div class="absolute inset-0 bg-cyan-500/10 translate-y-full group-hover:translate-y-0 transition-transform"></div>
+                <span class="relative mono text-cyan-400 text-xs tracking-widest uppercase">Sync Global Nodes</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+    <audio id="live-audio-player" crossorigin="anonymous" preload="auto"></audio>
+
+    <div class="ui-overlay">
+        <!-- Header -->
+        <header class="ui-element col-span-3 flex justify-between items-center py-0 px-6 border-b border-cyan-500/20 h-14">
+            <div class="flex items-center gap-6">
+                <div class="text-xl font-bold mono text-cyan-500 tracking-widest">BEZELX GLOBAL</div>
+                <nav class="flex gap-4 h-full pt-4">
+                    <button id="tab-radio" class="tab-btn active" onclick="switchTab('radio')">RADIO</button>
+                    <button id="tab-tv" class="tab-btn" onclick="switchTab('tv')">TELEVISION</button>
+                </nav>
+            </div>
+            <div class="flex gap-10 mono text-[10px] text-gray-500">
+                <div class="text-right">
+                    <div class="uppercase opacity-40">Band Status</div>
+                    <div id="stream-status" class="text-cyan-400">IDLE</div>
+                </div>
+                <div id="current-time" class="text-right tabular-nums hidden md:block">00:00:00</div>
+            </div>
+        </header>
+
+        <!-- Sidebar Left: Universal Explorer -->
+        <aside class="ui-element flex flex-col gap-4 overflow-hidden">
+            <div class="flex flex-col gap-3">
+                <h2 id="search-title" class="text-[9px] font-bold mono text-cyan-500 tracking-[0.2em] uppercase">Radio Search</h2>
+                <input type="text" id="search-input" placeholder="Enter country or genre..." class="search-input" autocomplete="off">
+                <div class="flex gap-2">
+                    <button id="search-btn" onclick="triggerSearch()" class="flex-grow py-2 bg-cyan-950/30 border border-cyan-900 text-[10px] mono text-cyan-400 hover:bg-cyan-500 hover:text-black transition-all cursor-pointer">SCAN NETWORK</button>
+                </div>
+                <div class="flex gap-2">
+                    <button id="toggle-working" onclick="toggleWorkingFilter()" class="filter-toggle flex-grow">Filter: Working Only</button>
+                    <button id="toggle-favs" onclick="toggleFavsFilter()" class="filter-toggle flex-grow">Favorites</button>
+                </div>
+            </div>
+
+            <div class="flex-grow flex flex-col overflow-hidden mt-2">
+                <h2 class="text-[9px] font-bold mono text-gray-500 mb-2 uppercase flex justify-between">
+                    <span>Signals Located</span>
+                    <span id="result-count">0 nodes</span>
+                </h2>
+                <div id="frequency-list" class="space-y-1 overflow-y-auto flex-grow pr-1">
+                    <div class="p-8 text-center text-[10px] mono text-gray-600 italic">Initializing scanner...</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center: Geographic Viewport -->
+        <main class="flex flex-col justify-end items-center pb-6 pointer-events-none relative overflow-hidden">
+            <div class="bg-black/80 border border-cyan-500/10 p-5 rounded-sm min-w-[340px] text-center backdrop-blur-3xl shadow-2xl pointer-events-auto">
+                <div class="flex justify-center gap-1 mb-2">
+                    <div class="w-1 h-3 bg-cyan-500"></div>
+                    <div class="w-1 h-3 bg-cyan-500/50"></div>
+                    <div class="w-1 h-3 bg-cyan-500/20"></div>
+                </div>
+                <div id="active-station-name" class="text-lg font-light text-white mb-1 tracking-tight leading-tight uppercase">Carrier Offline</div>
+                <div id="active-station-tags" class="text-[8px] mono text-cyan-600 uppercase mb-3 truncate">Ready for Tuning</div>
+                <div id="coord-display" class="text-[9px] mono text-gray-500 py-1 border-t border-white/5 uppercase">COORDINATES: --.----, --.----</div>
+            </div>
+        </main>
+
+        <!-- Sidebar Right: Analysis / Media Panel -->
+        <aside class="ui-element flex flex-col gap-6 overflow-hidden">
+            <!-- Analytics Container (Visible in Radio) -->
+            <div id="analytics-container" class="flex flex-col gap-6 h-full">
+                <div class="flex-grow">
+                    <h2 class="text-[9px] font-bold mono text-cyan-500 mb-3 tracking-widest uppercase flex justify-between">
+                        <span>Signal Analytics</span>
+                        <span id="bitrate-tag" class="text-cyan-900 uppercase">0 KBPS</span>
+                    </h2>
+                    <div id="spectrum-bars" class="flex items-end gap-[1px] h-28 bg-black/40 rounded p-1 overflow-hidden">
+                        <!-- Bars -->
+                    </div>
+                </div>
+                
+                <div class="border-t border-cyan-950 pt-4">
+                    <h2 class="text-[9px] font-bold mono text-cyan-500 mb-3 tracking-widest uppercase">Temporal Waterfall</h2>
+                    <canvas id="waterfall"></canvas>
+                </div>
+            </div>
+
+            <!-- TV Panel (Visible in Television) -->
+            <div id="tv-panel" class="hidden flex-grow flex flex-col gap-4 overflow-hidden">
+                <h2 class="text-[9px] font-bold mono text-cyan-500 mb-0 tracking-widest uppercase flex justify-between">
+                    <span>Video Downlink</span>
+                    <span class="text-cyan-900 uppercase">Uplink_Stable</span>
+                </h2>
+                <div id="tv-viewport-container" class="flex-grow border border-cyan-500/30 rounded aspect-video bg-black relative flex items-center justify-center">
+                    <video id="video-player" controls autoplay class="w-full h-full"></video>
+                    <div class="tv-overlay-tag">Live</div>
+                </div>
+                <button id="fullscreen-btn" onclick="toggleFullscreen()" class="w-full py-3 border border-cyan-500/50 bg-cyan-500/10 text-cyan-400 mono text-[10px] uppercase tracking-widest hover:bg-cyan-500 hover:text-black transition-all">Enable Fullscreen</button>
+            </div>
+            
+            <!-- Shared Volume Control -->
+            <div class="mt-auto border-t border-cyan-950 pt-4">
+                <div class="flex justify-between text-[9px] mono text-amber-500 mb-2 uppercase font-bold">
+                    <span>Master Gain</span>
+                    <span id="vol-display">50%</span>
+                </div>
+                <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.5" class="w-full accent-amber-500 cursor-pointer">
+            </div>
+        </aside>
+
+        <!-- Footer -->
+        <footer class="col-span-3 flex justify-between items-center px-4 py-1 text-[8px] mono text-gray-700 uppercase tracking-widest">
+            <div>Link: Secure_Relay_Active</div>
+            <div class="flex gap-4">
+                <span>Buffer: <span id="buffer-val" class="text-cyan-900">0.0s</span></span>
+                <span>Active Band: <span id="active-band" class="text-cyan-900 uppercase">RADIO</span></span>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        const audioPlayer = document.getElementById('live-audio-player');
+        const videoPlayer = document.getElementById('video-player');
+        const searchInput = document.getElementById('search-input');
+        
+        let audioCtx, analyser, sourceAudio, sourceVideo;
+        let isAudioInit = false;
+        let currentTab = 'radio';
+        let hls = null;
+        let tvDatabase = [];
+        let tvStreams = [];
+        
+        // State Management
+        let favorites = new Set();
+        let failedStations = new Set();
+        let showFavsOnly = false;
+        let showWorkingOnly = false;
+        let currentResults = [];
+        let isPseudoFullscreen = false;
+        let currentTvAttemptIndex = 0;
+        let currentAvailableStreams = [];
+        let probeTimer = null;
+
+        // --- 3D Scene ---
+        let scene, camera, renderer, globe;
+        function initThree() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            globe = new THREE.Mesh(
+                new THREE.SphereGeometry(2, 64, 64),
+                new THREE.MeshPhongMaterial({ color: 0x0a1a2a, wireframe: true, transparent: true, opacity: 0.1, emissive: 0x002244 })
+            );
+            scene.add(globe);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            camera.position.z = 6;
+        }
+
+        async function initAudio() {
+            if (isAudioInit) {
+                if(audioCtx.state === 'suspended') await audioCtx.resume();
+                return;
+            }
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 256;
+                sourceAudio = audioCtx.createMediaElementSource(audioPlayer);
+                sourceVideo = audioCtx.createMediaElementSource(videoPlayer);
+                sourceAudio.connect(analyser);
+                sourceVideo.connect(analyser);
+                analyser.connect(audioCtx.destination);
+                isAudioInit = true;
+            } catch (err) { console.warn("Audio Context blocked."); }
+        }
+
+        async function preloadTVData() {
+            const bootText = document.getElementById('boot-text');
+            bootText.innerText = "Syncing Bezelx Satellites...";
+            try {
+                const [channelsRes, streamsRes] = await Promise.all([
+                    fetch('https://iptv-org.github.io/api/channels.json'),
+                    fetch('https://iptv-org.github.io/api/streams.json')
+                ]);
+                if (!channelsRes.ok || !streamsRes.ok) throw new Error("Sat Handshake Failed");
+                
+                const rawChannels = await channelsRes.json();
+                tvStreams = await streamsRes.json();
+                
+                const streamableChannelIds = new Set(tvStreams.map(s => s.channel));
+                tvDatabase = rawChannels.filter(channel => streamableChannelIds.has(channel.id));
+                
+                console.log(`Initialized ${tvDatabase.length} streamable TV nodes.`);
+            } catch (e) {
+                bootText.innerText = "TV Nodes Offline. Radio only.";
+                bootText.style.color = "#ff4444";
+            }
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.getElementById('search-title').innerText = `${tab.toUpperCase()} SCANNER`;
+            searchInput.placeholder = tab === 'radio' ? "Country, City or Genre..." : "TV Station or Country...";
+            searchInput.value = "";
+            document.getElementById('active-band').innerText = tab.toUpperCase();
+
+            if (tab === 'radio') {
+                document.getElementById('analytics-container').classList.remove('hidden');
+                document.getElementById('tv-panel').classList.add('hidden');
+                document.getElementById('tv-viewport-container').style.display = 'none';
+                videoPlayer.pause();
+                videoPlayer.src = "";
+                if(hls) { hls.destroy(); hls = null; }
+                if(isPseudoFullscreen) toggleFullscreen();
+            } else {
+                document.getElementById('analytics-container').classList.add('hidden');
+                document.getElementById('tv-panel').classList.remove('hidden');
+                document.getElementById('tv-viewport-container').style.display = 'flex';
+                audioPlayer.pause();
+                audioPlayer.src = "";
+            }
+            triggerSearch();
+        }
+
+        function toggleWorkingFilter() {
+            showWorkingOnly = !showWorkingOnly;
+            document.getElementById('toggle-working').classList.toggle('active', showWorkingOnly);
+            renderList(currentResults, currentTab);
+        }
+
+        function toggleFavsFilter() {
+            showFavsOnly = !showFavsOnly;
+            document.getElementById('toggle-favs').classList.toggle('active', showFavsOnly);
+            renderList(currentResults, currentTab);
+        }
+
+        function toggleFavorite(id, e) {
+            e.stopPropagation();
+            if (favorites.has(id)) favorites.delete(id);
+            else favorites.add(id);
+            renderList(currentResults, currentTab);
+        }
+
+        function triggerSearch() {
+            searchStations(searchInput.value || (currentTab === 'radio' ? "Addis Ababa" : "News"));
+        }
+
+        function applyWeightedSort(data, query, type) {
+            if (!query) return data;
+            const q = query.toLowerCase().trim();
+            
+            return data.sort((a, b) => {
+                const nameA = (type === 'radio' ? a.name : a.name || "").toLowerCase().trim();
+                const nameB = (type === 'radio' ? b.name : b.name || "").toLowerCase().trim();
+
+                let scoreA = 0;
+                if (nameA === q) scoreA = 3;
+                else if (nameA.startsWith(q)) scoreA = 2;
+                else if (nameA.includes(q)) scoreA = 1;
+
+                let scoreB = 0;
+                if (nameB === q) scoreB = 3;
+                else if (nameB.startsWith(q)) scoreB = 2;
+                else if (nameB.includes(q)) scoreB = 1;
+
+                if (scoreA !== scoreB) {
+                    return scoreB - scoreA;
+                }
+
+                if (type === 'radio') {
+                    return (b.clickcount || 0) - (a.clickcount || 0);
+                }
+                return nameA.localeCompare(nameB);
+            });
+        }
+
+        async function searchStations(query) {
+            const list = document.getElementById('frequency-list');
+            list.innerHTML = `<div class="p-8 text-center text-[10px] mono text-cyan-500 animate-pulse uppercase">Filtering ${currentTab} nodes...</div>`;
+            
+            if (currentTab === 'radio') {
+                try {
+                    const response = await fetch(`https://de1.api.radio-browser.info/json/stations/search?name=${query}&limit=80&order=clickcount&reverse=true`);
+                    let results = await response.json();
+                    currentResults = applyWeightedSort(results, query, 'radio');
+                    renderList(currentResults, 'radio');
+                } catch (e) { list.innerHTML = '<div class="p-8 text-center mono text-red-500">Radio Node Timeout</div>'; }
+            } else {
+                if (!tvDatabase || tvDatabase.length === 0) { await preloadTVData(); }
+                const q = query.toLowerCase();
+                let filtered = tvDatabase.filter(s => 
+                    (s.name && s.name.toLowerCase().includes(q)) || 
+                    (s.countries && s.countries.some(c => c.toLowerCase().includes(q)))
+                );
+                currentResults = applyWeightedSort(filtered, query, 'tv').slice(0, 100);
+                renderList(currentResults, 'tv');
+            }
+        }
+
+        function renderList(data, type) {
+            const list = document.getElementById('frequency-list');
+            list.innerHTML = "";
+            
+            const filtered = data.filter(st => {
+                const id = type === 'radio' ? st.stationuuid : st.id;
+                if (showFavsOnly && !favorites.has(id)) return false;
+                if (showWorkingOnly && failedStations.has(id)) return false;
+                return true;
+            });
+
+            document.getElementById('result-count').innerText = `${filtered.length} Nodes`;
+
+            if (filtered.length === 0) {
+                list.innerHTML = `<div class="p-8 text-center text-[10px] mono text-gray-500 uppercase">${showFavsOnly ? 'Favorites Empty' : 'No Signals Found'}</div>`;
+                return;
+            }
+
+            filtered.forEach(st => {
+                const id = type === 'radio' ? st.stationuuid : st.id;
+                const item = document.createElement('div');
+                item.className = `station-item p-3 cursor-pointer flex flex-col gap-1 pointer-events-auto ${favorites.has(id) ? 'border-amber-900/30' : ''}`;
+                
+                const favActive = favorites.has(id) ? 'active' : '';
+                const favIcon = `<button onclick="toggleFavorite('${id}', event)" class="fav-btn ${favActive}"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>`;
+
+                if (type === 'radio') {
+                    item.innerHTML = `
+                        <div class="flex justify-between items-start pointer-events-none pr-8">
+                            <span class="text-[8px] mono text-cyan-600 truncate w-2/3">${st.country || 'Global'}</span>
+                            <span class="text-[7px] mono text-gray-700">${st.bitrate || 0}kbps</span>
+                        </div>
+                        <div class="text-[11px] font-bold uppercase truncate pointer-events-none">${(st.name || 'Unknown Node').trim()}</div>
+                        ${favIcon}
+                    `;
+                    item.onclick = () => tuneRadio(st, item);
+                } else {
+                    item.innerHTML = `
+                        <div class="flex justify-between items-start pointer-events-none pr-8">
+                            <span class="text-[8px] mono text-amber-600 truncate w-2/3">${(st.countries || ['Global']).join(', ')}</span>
+                            <span class="text-[7px] mono ${failedStations.has(id) ? 'text-red-800' : 'text-gray-700'}">${failedStations.has(id) ? 'FAILED' : 'SIGNAL'}</span>
+                        </div>
+                        <div class="text-[11px] font-bold uppercase truncate pointer-events-none">${(st.name || 'Unknown Channel').trim()}</div>
+                        ${favIcon}
+                    `;
+                    item.onclick = () => tuneTV(st, item);
+                }
+                list.appendChild(item);
+            });
+        }
+
+        /**
+         * Persistence: Save current session to localStorage
+         */
+        function saveSession(tab, data) {
+            try {
+                localStorage.setItem('bezelx_last_session', JSON.stringify({ tab, data }));
+            } catch (e) { console.warn("Failed to save session."); }
+        }
+
+        async function tuneRadio(st, element) {
+            await initAudio();
+            document.querySelectorAll('.station-item').forEach(d => d.classList.remove('active-station'));
+            if (element) element.classList.add('active-station');
+            updateDisplay(st.name, st.tags || st.language, st.country);
+            setStatus("WAITING", "amber");
+            audioPlayer.src = st.url_resolved || st.url;
+            audioPlayer.play().then(() => setStatus("LOCKED", "cyan")).catch(() => setStatus("OFFLINE", "red"));
+            document.getElementById('bitrate-tag').innerText = `${st.bitrate || 128} KBPS`;
+            saveSession('radio', st);
+        }
+
+        async function tuneTV(st, element) {
+            await initAudio();
+            document.querySelectorAll('.station-item').forEach(d => d.classList.remove('active-station'));
+            if (element) element.classList.add('active-station');
+            updateDisplay(st.name, (st.categories || []).join(' '), (st.countries || [])[0] || "Global");
+            
+            currentAvailableStreams = tvStreams.filter(s => s.channel === st.id)
+                .sort((a, b) => (b.url.startsWith('https') ? 1 : -1) - (a.url.startsWith('https') ? 1 : -1));
+            
+            currentTvAttemptIndex = 0;
+            attemptTvStream(st.id);
+            saveSession('tv', st);
+        }
+
+        function attemptTvStream(stationId) {
+            if (currentTvAttemptIndex >= currentAvailableStreams.length) {
+                setStatus("BAND_FAIL", "red");
+                failedStations.add(stationId);
+                renderList(currentResults, currentTab);
+                return;
+            }
+            if (hls) { hls.destroy(); hls = null; }
+            const target = currentAvailableStreams[currentTvAttemptIndex];
+            setStatus(`PROBING [${currentTvAttemptIndex + 1}/${currentAvailableStreams.length}]`, "amber");
+            videoPlayer.muted = false;
+            clearTimeout(probeTimer);
+            probeTimer = setTimeout(() => { nextAttempt(stationId); }, 6000);
+
+            if (Hls.isSupported() && (target.url.includes('.m3u8') || target.url.includes('.ts') || target.url.includes('stream'))) {
+                hls = new Hls({ enableWorker: true, lowLatencyMode: true, manifestLoadingMaxRetry: 0 });
+                hls.loadSource(target.url);
+                hls.attachMedia(videoPlayer);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    clearTimeout(probeTimer);
+                    videoPlayer.play().then(() => setStatus("BAND_LOCKED", "cyan")).catch(() => nextAttempt(stationId));
+                });
+                hls.on(Hls.Events.ERROR, (event, data) => { if(data.fatal) { clearTimeout(probeTimer); nextAttempt(stationId); } });
+            } else {
+                videoPlayer.src = target.url;
+                videoPlayer.play().then(() => { clearTimeout(probeTimer); setStatus("BAND_LOCKED", "cyan"); }).catch(() => { clearTimeout(probeTimer); nextAttempt(stationId); });
+            }
+        }
+
+        function nextAttempt(stationId) {
+            videoPlayer.pause();
+            videoPlayer.removeAttribute('src');
+            videoPlayer.load();
+            currentTvAttemptIndex++;
+            attemptTvStream(stationId);
+        }
+
+        function setStatus(txt, color) {
+            const el = document.getElementById('stream-status');
+            el.innerText = txt.toUpperCase();
+            el.style.color = color === 'cyan' ? 'var(--neon-blue)' : (color === 'amber' ? 'var(--neon-amber)' : '#ef4444');
+        }
+
+        function updateDisplay(name, tags, addr) {
+            document.getElementById('active-station-name').innerText = (name || 'Unknown').toUpperCase();
+            document.getElementById('active-station-tags').innerText = tags || "NO METADATA";
+            document.getElementById('coord-display').innerText = `COORDINATES: ${(Math.random()*180-90).toFixed(4)}, ${(Math.random()*360-180).toFixed(4)} | ORIGIN: ${addr || 'GLOBAL_NODE'}`;
+            globe.rotation.y = Math.random() * 5;
+        }
+
+        function toggleFullscreen() {
+            const viewport = document.getElementById('tv-viewport-container');
+            isPseudoFullscreen = !isPseudoFullscreen;
+            if (isPseudoFullscreen) viewport.classList.add('fullscreen-active');
+            else viewport.classList.remove('fullscreen-active');
+        }
+
+        const wCanvas = document.getElementById('waterfall');
+        const wCtx = wCanvas.getContext('2d');
+        wCanvas.width = 300; wCanvas.height = 100;
+        let waterfallData = [];
+
+        function renderLoop() {
+            if (analyser) {
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                analyser.getByteFrequencyData(dataArray);
+                const bars = document.getElementById('spectrum-bars').children;
+                if (bars && bars.length > 0 && currentTab === 'radio') {
+                    for(let i=0; i<bars.length; i++) {
+                        const val = dataArray[i * 2] || 0;
+                        bars[i].style.height = (val / 255 * 100) + '%';
+                        bars[i].style.backgroundColor = `rgba(0, 242, 255, ${0.1 + (val/255)})`;
+                    }
+                }
+                const row = new Uint8Array(wCanvas.width);
+                for(let i=0; i<wCanvas.width; i++) { row[i] = dataArray[Math.floor(i * (dataArray.length / wCanvas.width))]; }
+                waterfallData.unshift(row);
+                if (waterfallData.length > wCanvas.height) waterfallData.pop();
+                const imgData = wCtx.createImageData(wCanvas.width, wCanvas.height);
+                for (let y = 0; y < waterfallData.length; y++) {
+                    for (let x = 0; x < wCanvas.width; x++) {
+                        const idx = (y * wCanvas.width + x) * 4;
+                        const val = waterfallData[y][x];
+                        imgData.data[idx] = val * 0.1; imgData.data[idx+1] = val * 0.7; imgData.data[idx+2] = val; imgData.data[idx+3] = 255;
+                    }
+                }
+                wCtx.putImageData(imgData, 0, 0);
+            }
+            requestAnimationFrame(renderLoop);
+        }
+
+        window.onload = () => {
+            initThree(); renderLoop();
+            const spec = document.getElementById('spectrum-bars');
+            for(let i=0; i<60; i++) {
+                const b = document.createElement('div');
+                b.className = 'flex-grow transition-all duration-75';
+                b.style.height = '1%';
+                spec.appendChild(b);
+            }
+            document.getElementById('power-btn').onclick = async () => {
+                document.getElementById('power-btn').disabled = true;
+                await initAudio(); await preloadTVData();
+                document.getElementById('power-overlay').style.opacity = '0';
+                
+                // Persistence: Check for last session
+                const lastSession = localStorage.getItem('bezelx_last_session');
+                
+                setTimeout(async () => { 
+                    document.getElementById('power-overlay').remove(); 
+                    
+                    if (lastSession) {
+                        try {
+                            const { tab, data } = JSON.parse(lastSession);
+                            // Populate search box with the station name to make it visible in the list
+                            searchInput.value = data.name;
+                            if (tab === 'radio') {
+                                switchTab('radio');
+                                tuneRadio(data, null);
+                            } else {
+                                switchTab('tv');
+                                tuneTV(data, null);
+                            }
+                        } catch (e) { triggerSearch(); }
+                    } else {
+                        triggerSearch(); 
+                    }
+                }, 500);
+            };
+            searchInput.onkeydown = (e) => { if(e.key === 'Enter') triggerSearch(); };
+            document.getElementById('volume-slider').oninput = (e) => {
+                const v = e.target.value; audioPlayer.volume = v; videoPlayer.volume = v;
+                document.getElementById('vol-display').innerText = Math.round(v * 100) + "%";
+            };
+            setInterval(() => { document.getElementById('current-time').innerText = new Date().toLocaleTimeString('en-US', { hour12: false }); }, 1000);
+            function anim() { requestAnimationFrame(anim); globe.rotation.y += 0.0003; renderer.render(scene, camera); }
+            anim();
+        };
+    </script>
+</body>
+</html>
